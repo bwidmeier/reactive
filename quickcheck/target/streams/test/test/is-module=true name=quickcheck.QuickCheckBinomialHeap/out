@@ -1,0 +1,14 @@
+[0m[[0minfo[0m] [0m+ Heap.min1: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.min2LowThenHigh: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.min2HighThenLow: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.empty is empty: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.removing last makes empty: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.HLH sandwich: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.LHL sandwich: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.3 ascending: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.3 descending: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.left empty meld: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.right empty meld: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.right lower meld: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.left lower meld: OK, passed 100 tests.[0m
+[0m[[0minfo[0m] [0m+ Heap.HLM delete all: OK, passed 100 tests.[0m

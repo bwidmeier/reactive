@@ -1,0 +1,8 @@
+package greeter
+
+object Sheet {
+  println("Welcome to the Scala worksheet")       //> Welcome to the Scala worksheet
+  val x = 1
+  def increase(i: Int) = i + 1
+  increase(x)
+}

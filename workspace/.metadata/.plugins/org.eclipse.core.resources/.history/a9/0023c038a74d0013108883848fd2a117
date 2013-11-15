@@ -1,0 +1,31 @@
+package quickcheck
+
+import common._
+
+import org.scalacheck._
+import Arbitrary._
+import Gen._
+import Prop._
+
+abstract class QuickCheckHeap extends Properties("Heap") with IntHeap {
+
+  property("min1") = forAll { a: Int =>
+    val h = insert(a, empty)
+    findMin(h) == a
+  }
+
+  property("min2LowThenHigh") = forAll {a : Int =>
+    val h = insert(4, insert(3, empty))
+    findMin(h) == 3
+  }
+  
+  property("min2HighThenLow") = forAll {a : Int =>
+    val h = insert(3, insert(4, empty))
+    findMin(h) == 4
+  }
+  
+  lazy val genHeap: Gen[H] = ???
+
+  implicit lazy val arbHeap: Arbitrary[H] = Arbitrary(genHeap)
+
+}
