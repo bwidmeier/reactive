@@ -55,7 +55,7 @@ class BinaryTreeSet extends Actor {
   import BinaryTreeNode._
 
   def createRoot: ActorRef = context.actorOf(BinaryTreeNode.props(0, initiallyRemoved = true))
-
+  
   var root = createRoot
 
   // optional
@@ -66,7 +66,12 @@ class BinaryTreeSet extends Actor {
 
   // optional
   /** Accepts `Operation` and `GC` messages. */
-  val normal: Receive = { case _ => ??? }
+  val normal: Receive = { 
+    case Insert(requester, id, elem) => root ! Insert(requester, id, elem)
+    case Contains(requester, id, elem) => root ! Contains(requester, id, elem)
+    case Remove(requester, id, elem) => root ! Remove(requester, id, elem)
+    case GC => ???
+  }
 
   // optional
   /** Handles messages while garbage collection is performed.
@@ -98,11 +103,72 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
 
   // optional
   def receive = normal
-
+ 
+  
   // optional
   /** Handles `Operation` messages and `CopyTo` requests. */
-  val normal: Receive = { case _ => ??? }
+  val normal: Receive = { 
+    case Insert(requester, id, e) => handleInsert(requester, id, e)
+    case Contains(requester, id, e) => handleContains(requester, id, e)
+    case Remove(requester, id, e) => handleRemove(requester, id, e)
+    case CopyTo(node) => ???
+    }
 
+  def handleInsert(requester: ActorRef, id: Int, e: Int): Unit = {
+    if (e == elem) {
+      removed = false
+      requester ! OperationFinished(id)
+    }
+    else if (e < elem)
+      subtrees.get(Left) match {
+      	case None => {
+      	  subtrees += (Left -> context.actorOf(props(e, false)))
+      	  requester ! OperationFinished(id)
+      	}
+      	case Some(a) => a ! Insert(requester, id, e)
+      }
+    else
+      subtrees.get(Right) match {
+      	case None => {
+	      subtrees += (Right -> context.actorOf(props(e, false)))
+	      requester ! OperationFinished(id)
+	    }
+	    case Some(a) => a ! Insert(requester, id, e)
+      }
+  }
+  
+  def handleContains(requester: ActorRef, id: Int, e: Int): Unit = {
+    if (e == elem)
+      requester ! ContainsResult(id, !removed)
+    else if (e < elem)
+      subtrees.get(Left) match {
+      	case None => requester ! ContainsResult(id, false)
+      	case Some(a) => a ! Contains(requester, id, e)
+      }
+    else
+      subtrees.get(Right) match {
+      	case None => requester ! ContainsResult(id, false)
+      	case Some(a) => a ! Contains(requester, id, e)
+      }
+  }
+  
+  def handleRemove(requester: ActorRef, id: Int, e: Int): Unit = {
+    if (e == elem) {
+      removed = true
+      requester ! OperationFinished(id)
+    }
+    else if (e < elem)
+      subtrees.get(Left) match {
+      	case None => OperationFinished(id)
+      	case Some(a) => a ! Remove(requester, id, e)
+      }
+    else
+      subtrees.get(Right) match {
+      	case None => OperationFinished(id)
+      	case Some(a) => a ! Remove(requester, id, e)
+      }
+  }
+  
   // optional
   /** `expected` is the set of ActorRefs whose replies we are waiting for,
     * `insertConfirmed` tracks whether the copy of this node to the new tree has been confirmed.
