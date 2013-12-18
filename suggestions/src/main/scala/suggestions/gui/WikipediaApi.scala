@@ -10,6 +10,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{ Try, Success, Failure }
 import rx.subscriptions.CompositeSubscription
 import rx.lang.scala.Observable
+import rx.lang.scala.subjects.ReplaySubject
+import rx.lang.scala.Notification._
 import observablex._
 import search._
 
@@ -25,8 +27,8 @@ trait WikipediaApi {
 
   /** Returns an `Observable` with a list of possible completions for a search `term`.
    */
-  def wikiSuggestResponseStream(term: String): Observable[List[String]] = ObservableEx(wikipediaSuggestion(term))
 
+  def wikiSuggestResponseStream(term: String): Observable[List[String]] = ObservableEx(wikipediaSuggestion(term))
   /** Returns an `Observable` with the contents of the Wikipedia page for the given search `term`.
    */
   def wikiPageResponseStream(term: String): Observable[String] = ObservableEx(wikipediaPage(term))
@@ -37,7 +39,7 @@ trait WikipediaApi {
      *
      * E.g. `"erik", "erik meijer", "martin` should become `"erik", "erik_meijer", "martin"`
      */
-    def sanitized: Observable[String] = ???
+    def sanitized: Observable[String] = obs.map { _.replace(" ", "_") }
 
   }
 
@@ -48,7 +50,12 @@ trait WikipediaApi {
      *
      * E.g. `1, 2, 3, !Exception!` should become `Success(1), Success(2), Success(3), Failure(Exception), !TerminateStream!`
      */
-    def recovered: Observable[Try[T]] = ???
+    def recovered: Observable[Try[T]] = {      
+      obs.materialize map {
+        case OnNext(t) => Success(t)
+        case OnError(e) => Failure(e)
+      }
+    }
 
     /** Emits the events from the `obs` observable, until `totalSec` seconds have elapsed.
      *
@@ -56,7 +63,13 @@ trait WikipediaApi {
      *
      * Note: uses the existing combinators on observables.
      */
-    def timedOut(totalSec: Long): Observable[T] = ???
+    def timedOut(totalSec: Long): Observable[T] = {
+      val intervalObs = Observable.interval(totalSec seconds) map { Left[Long, T](_) }
+      intervalObs.merge(obs map { Right(_) }) flatMap { 
+        case Right(t) => Observable(t) 
+        case Left(i) => Observable() 
+      }
+    }
 
 
     /** Given a stream of events `obs` and a method `requestMethod` to map a request `T` into
@@ -84,7 +97,9 @@ trait WikipediaApi {
      *
      * Observable(Success(1), Succeess(1), Succeess(1), Succeess(2), Succeess(2), Succeess(2), Succeess(3), Succeess(3), Succeess(3))
      */
-    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = ???
+    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = {
+      obs.flatMap(requestMethod).recovered
+    }
 
   }
 
