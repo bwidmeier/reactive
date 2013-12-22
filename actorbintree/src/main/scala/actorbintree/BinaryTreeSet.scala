@@ -57,22 +57,45 @@ class BinaryTreeSet extends Actor {
   def createRoot: ActorRef = context.actorOf(BinaryTreeNode.props(0, initiallyRemoved = true))
   
   var root = createRoot
-
+//  var lastRoot: Option[ActorRef] = None
+  
   // optional
   var pendingQueue = Queue.empty[Operation]
 
-  // optional
+  // optional  
   def receive = normal
-
+  
   // optional
   /** Accepts `Operation` and `GC` messages. */
   val normal: Receive = { 
-    case Insert(requester, id, elem) => root ! Insert(requester, id, elem)
-    case Contains(requester, id, elem) => root ! Contains(requester, id, elem)
-    case Remove(requester, id, elem) => root ! Remove(requester, id, elem)
-    case GC => ???
+    case op:Operation => root ! op
+    case GC => {
+      context.become(gc)
+      var newRoot = createRoot
+      root ! CopyTo(newRoot)
+//      lastRoot = Some(root)
+      root = newRoot
+    }
   }
 
+  val gc: Receive = {
+    case op:Operation => pendingQueue = pendingQueue enqueue op
+    case GC => {}
+    case CopyFinished => {
+      while (!pendingQueue.isEmpty) {
+        val (op, newQueue) = pendingQueue.dequeue 
+        pendingQueue = newQueue
+        root ! op
+      }
+        
+//      lastRoot match {
+//        case None => {}
+//        case Some(r) => r ! PoisonPill
+//      }
+      context.become(normal)
+    }
+  }
+  
   // optional
   /** Handles messages while garbage collection is performed.
     * `newRoot` is the root of the new binary tree where we want to copy
@@ -104,16 +127,6 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
   // optional
   def receive = normal
  
-  
-  // optional
-  /** Handles `Operation` messages and `CopyTo` requests. */
-  val normal: Receive = { 
-    case Insert(requester, id, e) => handleInsert(requester, id, e)
-    case Contains(requester, id, e) => handleContains(requester, id, e)
-    case Remove(requester, id, e) => handleRemove(requester, id, e)
-    case CopyTo(node) => ???
-    }
-
   def handleInsert(requester: ActorRef, id: Int, e: Int): Unit = {
     if (e == elem) {
       removed = false
@@ -159,14 +172,56 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
     }
     else if (e < elem)
       subtrees.get(Left) match {
-      	case None => OperationFinished(id)
+      	case None => requester ! OperationFinished(id)
       	case Some(a) => a ! Remove(requester, id, e)
       }
     else
       subtrees.get(Right) match {
-      	case None => OperationFinished(id)
+      	case None => requester ! OperationFinished(id)
       	case Some(a) => a ! Remove(requester, id, e)
       }
+  }
+  
+  var awaitedActors = Set.empty[ActorRef]
+  var insertConfirmed = false
+  
+  val copy: Receive = {
+    case CopyFinished => { 
+      awaitedActors = awaitedActors - sender
+      sender ! PoisonPill
+      checkDone
+    }
+    case OperationFinished(i) => { insertConfirmed = true; checkDone }
+  }
+  
+  def checkDone = {
+    if (insertConfirmed && awaitedActors.isEmpty)
+      context.parent ! CopyFinished
+  }
+  
+  // optional
+  /** Handles `Operation` messages and `CopyTo` requests. */
+  val normal: Receive = { 
+    case Insert(requester, id, e) => handleInsert(requester, id, e)
+    case Contains(requester, id, e) => handleContains(requester, id, e)
+    case Remove(requester, id, e) => handleRemove(requester, id, e)
+    case CopyTo(node) => {
+      context.become(copy)
+      
+      if (!removed)
+    	node ! Insert(context.self, 2, elem)
+      else
+        insertConfirmed = true
+      
+      (subtrees.get(Left), subtrees.get(Right)) match {
+        case (None, None) => {}
+        case (Some(l), None) => { l ! CopyTo(node); awaitedActors = Set(l) }
+        case (None, Some(r)) => { r ! CopyTo(node); awaitedActors = Set(r) }
+        case (Some(l), Some(r)) => { l ! CopyTo(node); r ! CopyTo(node); awaitedActors = Set(l, r) }
+      }
+      
+      checkDone
+    }
   }
   
   // optional
