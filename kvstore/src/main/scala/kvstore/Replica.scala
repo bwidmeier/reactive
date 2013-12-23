@@ -46,16 +46,20 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // the current set of replicators
   var replicators = Set.empty[ActorRef]
   
+  val persister = context.actorOf(persistenceProps, "persister")
+  
   private def add(key: String, value: String) = kv = kv + (key -> value)
   private def remove(key: String) = kv = kv - key
   
   private def get(key: String, id: Long) = GetResult(key, kv.get(key), id)
   
+  private case object Resend
+  context.system.scheduler.schedule(0.1.seconds, 0.1.seconds, context.self, Resend)
   arbiter ! Join
   
   def receive = {
     case JoinedPrimary   => context.become(leader)
-    case JoinedSecondary => context.become(replica)
+    case JoinedSecondary => context.become(replica(Map.empty[Long, (ActorRef, String, Option[String])]))
   }
   
   /* TODO Behavior for  the leader role. */
@@ -72,19 +76,31 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     SnapshotAck(key, seq)
   }
   
-  /* TODO Behavior for the replica role. */
-  val replica: Receive = {
-    case Snapshot(key, valueOption, seq) => {
-    	if (seq < currSeq)
+  def replica(persists: Map[Long, (ActorRef, String, Option[String])]): Receive = {
+    case Snapshot(key, valueOption, seq) => { 
+      if (seq < currSeq)
     	  context.sender ! ack(key, seq)
     	else if (seq > currSeq) {}
-    	else
-    		valueOption match {
-    			case Some(v) => { add(key, v); context.sender ! ack(key, seq) }
-    			case None => { remove(key); context.sender ! ack(key, seq) }
-    	}
+    	else {
+    	  valueOption match {
+    	  	case Some(v) => add(key, v)
+    	  	case None => remove(key) 
+    	  }
+    	  persister ! Persist(key, valueOption, seq)
+    	  context.become(replica(persists + (seq -> (context.sender, key, valueOption)))) 
+       }
     }
     case Get(key, id) => context.sender ! get(key, id)
+    case Persisted(key, seq) => persists.get(seq) match {
+        case Some((sender, _, _)) => {
+          sender ! ack(key, seq)
+          context.become(replica(persists - seq))
+        }
+        case None => {}
+    }
+    case Resend => persists.foreach(p => {
+      val (seq, (_, key, valueOption)) = p
+      persister ! Persist(key, valueOption, seq)
+    })
   }
-
 }
