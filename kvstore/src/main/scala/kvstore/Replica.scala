@@ -82,6 +82,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
         val replicator = context.actorOf(Props(new Replicator(r)))
         replicators += replicator
         secondaries += (r -> replicator)
+        kv foreach { case (k, v) => replicator ! Replicate(k, Some(v), 42) }
       })
       
       val filteredReplicates = replicates map { 
